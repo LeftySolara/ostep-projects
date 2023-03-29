@@ -11,3 +11,5 @@ See the original author's [repo](https://github.com/remzi-arpacidusseau/ostep-pr
 - [Unix Utilities](./initial-utilities) (cat, grep, zip/unzip)
 
 ## Kernel Hacking Projects (xv6)
+
+- [Intro to xv6](./initial-xv6)
