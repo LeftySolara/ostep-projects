@@ -1,0 +1,132 @@
+diff -Naur xv6-riscv/kernel/defs.h src/kernel/defs.h
+--- xv6-riscv/kernel/defs.h	2023-03-30 10:03:18.400904172 -0400
++++ src/kernel/defs.h	2023-03-30 09:49:29.454605760 -0400
+@@ -185,5 +185,8 @@
+ void            virtio_disk_rw(struct buf *, int);
+ void            virtio_disk_intr(void);
+ 
++// getreadcount.c
++extern uint     readcount;
++
+ // number of elements in fixed-size array
+ #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
+diff -Naur xv6-riscv/kernel/syscall.c src/kernel/syscall.c
+--- xv6-riscv/kernel/syscall.c	2023-03-30 10:03:18.404237536 -0400
++++ src/kernel/syscall.c	2023-03-29 15:13:34.592368351 -0400
+@@ -101,6 +101,7 @@
+ extern uint64 sys_link(void);
+ extern uint64 sys_mkdir(void);
+ extern uint64 sys_close(void);
++extern uint64 sys_getreadcount(void);
+ 
+ // An array mapping syscall numbers from syscall.h
+ // to the function that handles the system call.
+@@ -126,6 +127,7 @@
+ [SYS_link]    sys_link,
+ [SYS_mkdir]   sys_mkdir,
+ [SYS_close]   sys_close,
++[SYS_getreadcount]   sys_getreadcount,
+ };
+ 
+ void
+diff -Naur xv6-riscv/kernel/syscall.h src/kernel/syscall.h
+--- xv6-riscv/kernel/syscall.h	2023-03-30 10:03:18.404237536 -0400
++++ src/kernel/syscall.h	2023-03-29 13:32:43.261467024 -0400
+@@ -20,3 +20,4 @@
+ #define SYS_link   19
+ #define SYS_mkdir  20
+ #define SYS_close  21
++#define SYS_getreadcount 22
+diff -Naur xv6-riscv/kernel/sysfile.c src/kernel/sysfile.c
+--- xv6-riscv/kernel/sysfile.c	2023-03-30 10:03:18.404237536 -0400
++++ src/kernel/sysfile.c	2023-03-30 09:56:12.135911108 -0400
+@@ -16,6 +16,21 @@
+ #include "file.h"
+ #include "fcntl.h"
+ 
++uint readcount = 0;
++static struct spinlock readcount_lock;
++
++void
++init_readcount_lock(void)
++{
++  initlock(&readcount_lock, "readcount");
++}
++
++uint64
++sys_getreadcount(void)
++{
++  return readcount;
++}
++
+ // Fetch the nth word-sized system call argument as a file descriptor
+ // and return both the descriptor and the corresponding struct file.
+ static int
+@@ -68,6 +83,9 @@
+ uint64
+ sys_read(void)
+ {
++  acquire(&readcount_lock);
++  ++readcount;
++  release(&readcount_lock);
+   struct file *f;
+   int n;
+   uint64 p;
+diff -Naur xv6-riscv/Makefile src/Makefile
+--- xv6-riscv/Makefile	2023-03-30 10:03:18.400904172 -0400
++++ src/Makefile	2023-03-30 07:44:17.284009638 -0400
+@@ -120,6 +120,8 @@
+ 	$U/_echo\
+ 	$U/_forktest\
+ 	$U/_grep\
++	$U/_getreadcount\
++	$U/_hello\
+ 	$U/_init\
+ 	$U/_kill\
+ 	$U/_ln\
+diff -Naur xv6-riscv/user/getreadcount.c src/user/getreadcount.c
+--- xv6-riscv/user/getreadcount.c	1969-12-31 19:00:00.000000000 -0500
++++ src/user/getreadcount.c	2023-03-30 09:03:28.521531414 -0400
+@@ -0,0 +1,10 @@
++#include "kernel/types.h"
++#include "user/user.h"
++
++int
++main(int argc, char *argv[])
++{
++    int count = getreadcount();
++    printf("getreadcount.c: %d\n", count);
++    return count;
++}
+diff -Naur xv6-riscv/user/hello.c src/user/hello.c
+--- xv6-riscv/user/hello.c	1969-12-31 19:00:00.000000000 -0500
++++ src/user/hello.c	2023-03-29 15:53:22.612655871 -0400
+@@ -0,0 +1,9 @@
++#include "kernel/types.h"
++#include "user/user.h"
++
++int
++main(int argc, char *argv[])
++{
++  printf("hello my name is %s\n", argv[0]);
++  exit(0);
++}
+diff -Naur xv6-riscv/user/user.h src/user/user.h
+--- xv6-riscv/user/user.h	2023-03-30 10:03:18.407570900 -0400
++++ src/user/user.h	2023-03-29 14:10:23.144834461 -0400
+@@ -22,6 +22,7 @@
+ char* sbrk(int);
+ int sleep(int);
+ int uptime(void);
++int getreadcount(void);
+ 
+ // ulib.c
+ int stat(const char*, struct stat*);
+diff -Naur xv6-riscv/user/usys.pl src/user/usys.pl
+--- xv6-riscv/user/usys.pl	2023-03-30 10:03:18.407570900 -0400
++++ src/user/usys.pl	2023-03-29 14:06:48.165136162 -0400
+@@ -36,3 +36,4 @@
+ entry("sbrk");
+ entry("sleep");
+ entry("uptime");
++entry("getreadcount");
